@@ -304,7 +304,7 @@ class _PaymentPageState extends State<PaymentPage> {
                 const SizedBox(height: 12),
                 const Text('ငွေလက်ခံမည့်နံပါတ်'),
                 const SizedBox(height: 6),
-                const Text('094449269794', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text('09449269794', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),
                 Text('Amount: ${widget.amount}'),
                 Text('Total: ${widget.price}'),
