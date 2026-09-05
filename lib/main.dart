@@ -138,10 +138,15 @@ class _ProductPageState extends State<ProductPage> {
           {'amount': '344 Diamond', 'price': '9,200 Ks'},
         ]
       : [
-          {'amount': '60 UC', 'price': '3,000 Ks'},
-          {'amount': '325 UC', 'price': '14,000 Ks'},
-          {'amount': '660 UC', 'price': '27,000 Ks'},
-          {'amount': '1800 UC', 'price': '70,000 Ks'},
+         {'amount': '60 UC', 'price': '4,500 Ks'},
+{'amount': '325 UC', 'price': '20,500 Ks'},
+{'amount': '385 UC', 'price': '24,600 Ks'},
+{'amount': '660 UC', 'price': '40,500 Ks'},
+{'amount': '720 UC', 'price': '44,600 Ks'},
+{'amount': '985 UC', 'price': '60,600 Ks'},
+{'amount': '1800 UC', 'price': '101,100 Ks'},
+{'amount': '3850 UC', 'price': '200,200 Ks'},
+{'amount': '8100 UC', 'price': '385,800 Ks'},
         ];
 
   @override
