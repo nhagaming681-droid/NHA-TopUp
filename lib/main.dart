@@ -132,10 +132,15 @@ class _ProductPageState extends State<ProductPage> {
 
   late final List<Map<String, String>> packages = widget.game == 'MLBB'
       ? [
-          {'amount': '86 Diamond', 'price': '2,500 Ks'},
-          {'amount': '172 Diamond', 'price': '4,800 Ks'},
-          {'amount': '257 Diamond', 'price': '7,000 Ks'},
-          {'amount': '344 Diamond', 'price': '9,200 Ks'},
+    {'amount': '55 Diamond', 'price': '3,700 Ks'},
+{'amount': '86 Diamond', 'price': '5,350 Ks'},
+{'amount': '165 Diamond', 'price': '10,500 Ks'},
+{'amount': '172 Diamond', 'price': '11,000 Ks'},
+{'amount': '257 Diamond', 'price': '16,000 Ks'},
+{'amount': '275 Diamond', 'price': '16,600 Ks'},
+{'amount': '565 Diamond', 'price': '34,500 Ks'},
+{'amount': '706 Diamond', 'price': '43,000 Ks'},
+{'amount': '2195 Diamond', 'price': '130,000 Ks'},
         ]
       : [
          {'amount': '60 UC', 'price': '4,500 Ks'},
