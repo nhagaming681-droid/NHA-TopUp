@@ -20,6 +20,16 @@ jobs:
 
       - name: Create Android project
         run: flutter create --platforms=android .
+      - name: Set Firebase package name
+        run: sed -i 's/applicationId = "com.example.nha_top_up"/applicationId = "com.nha.topup"/' android/app/build.gradle.kts
+      - name: Configure Firebase Android plugin
+        run: |
+          sed -i '/plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
+          sed -i '/plugins {/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
+      - name: Add Firebase config
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
 
       - name: Get packages
         run: flutter pub get
