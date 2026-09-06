@@ -1,126 +1,217 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-void main() async { WidgetsFlutterBinding.ensureInitialized(); await Firebase.initializeApp(); runApp(const NhaTopUpApp()); }
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  runApp(const NhaTopUpApp());
+}
 
 class NhaTopUpApp extends StatelessWidget {
   const NhaTopUpApp({super.key});
-
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'NHA TopUp',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.indigo,
-        scaffoldBackgroundColor: const Color(0xfff6f7fb),
-      ),
-      home: const HomePage(),
-    );
-  }
-}
-
-class OrderData {
-  final String id, game, playerId, zoneId, amount, price, method, status, note, screenshot;
-  final String createdAt;
-
-  const OrderData({
-    required this.id,
-    required this.game,
-    required this.playerId,
-    required this.zoneId,
-    required this.amount,
-    required this.price,
-    required this.method,
-    required this.status,
-    required this.note,
-    required this.screenshot,
-    required this.createdAt,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'game': game,
-        'playerId': playerId,
-        'zoneId': zoneId,
-        'amount': amount,
-        'price': price,
-        'method': method,
-        'status': status,
-        'note': note,
-        'screenshot': screenshot,
-        'createdAt': createdAt,
-      };
-
-  factory OrderData.fromJson(Map<String, dynamic> j) => OrderData(
-        id: j['id'] ?? '',
-        game: j['game'] ?? '',
-        playerId: j['playerId'] ?? '',
-        zoneId: j['zoneId'] ?? '',
-        amount: j['amount'] ?? '',
-        price: j['price'] ?? '',
-        method: j['method'] ?? '',
-        status: j['status'] ?? 'Pending',
-        note: j['note'] ?? '',
-        screenshot: j['screenshot'] ?? '',
-        createdAt: j['createdAt'] ?? '',
+  Widget build(BuildContext context) => MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'NHA TopUp',
+        theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
+        home: const HomePage(),
       );
 }
 
-class OrderStore {
-  static const key = 'nha_orders';
+class CustomerId {
+  static Future<String> get() async {
+    final p = await SharedPreferences.getInstance();
+    var id = p.getString('customer_id');
+    if (id == null) {
+      id = 'c_${DateTime.now().millisecondsSinceEpoch}';
+      await p.setString('customer_id', id);
+    }
+    return id;
+  }
+}
 
-  static Future<List<OrderData>> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getStringList(key) ?? [];
-    return raw
-        .map((e) => OrderData.fromJson(jsonDecode(e) as Map<String, dynamic>))
-        .toList();
+class OrderService {
+  static final orders = FirebaseFirestore.instance.collection('orders');
+
+  static Future<String> create({
+    required String game,
+    required String playerId,
+    required String zoneId,
+    required String amount,
+    required String price,
+    required String paymentMethod,
+    required String transactionId,
+    required String note,
+  }) async {
+    final customerId = await CustomerId.get();
+    final ref = orders.doc();
+    await ref.set({
+      'orderId': ref.id,
+      'customerId': customerId,
+      'game': game,
+      'playerId': playerId,
+      'zoneId': zoneId,
+      'amount': amount,
+      'price': price,
+      'paymentMethod': paymentMethod,
+      'transactionId': transactionId,
+      'note': note,
+      'status': 'Pending',
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    return ref.id;
   }
 
-  static Future<void> add(OrderData order) async {
-    final orders = await load();
-    orders.insert(0, order);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(key, orders.map((e) => jsonEncode(e.toJson())).toList());
+  static Stream<QuerySnapshot<Map<String, dynamic>>> myOrders() async* {
+    final id = await CustomerId.get();
+    yield* orders.where('customerId', isEqualTo: id).snapshots();
   }
+}
+
+
+class AdminService {
+  static final auth = FirebaseAuth.instance;
+  static final admins = FirebaseFirestore.instance.collection('admins');
+
+  static Future<bool> isAdmin(User user) async {
+    final doc = await admins.doc(user.uid).get();
+    return doc.exists && (doc.data()?['enabled'] ?? true) == true;
+  }
+
+  static Future<void> updateStatus(String orderId, String status) async {
+    await FirebaseFirestore.instance.collection('orders').doc(orderId).update({
+      'status': status,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+}
+
+class AdminLoginPage extends StatefulWidget {
+  const AdminLoginPage({super.key});
+  @override State<AdminLoginPage> createState() => _AdminLoginPageState();
+}
+
+class _AdminLoginPageState extends State<AdminLoginPage> {
+  final email = TextEditingController();
+  final password = TextEditingController();
+  bool loading = false;
+
+  @override
+  void dispose() { email.dispose(); password.dispose(); super.dispose(); }
+
+  Future<void> login() async {
+    if (email.text.trim().isEmpty || password.text.isEmpty) return;
+    setState(() => loading = true);
+    try {
+      final cred = await AdminService.auth.signInWithEmailAndPassword(
+        email: email.text.trim(), password: password.text,
+      );
+      final user = cred.user!;
+      if (!await AdminService.isAdmin(user)) {
+        await AdminService.auth.signOut();
+        throw Exception('ဒီ Account ကို Admin အဖြစ်ခွင့်မပြုထားပါ');
+      }
+      if (!mounted) return;
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AdminPanelPage()));
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? 'Login မအောင်မြင်ပါ')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('NHA TopUp Admin')),
+    body: ListView(padding: const EdgeInsets.all(20), children: [
+      const Icon(Icons.admin_panel_settings, size: 80),
+      const SizedBox(height: 12),
+      const Text('Admin Login', textAlign: TextAlign.center, style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 24),
+      TextField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Admin Email', border: OutlineInputBorder(), prefixIcon: Icon(Icons.email))),
+      const SizedBox(height: 12),
+      TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder(), prefixIcon: Icon(Icons.lock))),
+      const SizedBox(height: 18),
+      FilledButton.icon(onPressed: loading ? null : login, icon: const Icon(Icons.login), label: Padding(padding: const EdgeInsets.all(12), child: Text(loading ? 'ဝင်နေသည်...' : 'Login'))),
+    ]),
+  );
+}
+
+class AdminPanelPage extends StatelessWidget {
+  const AdminPanelPage({super.key});
+
+  Future<void> changeStatus(BuildContext context, String id, String status) async {
+    try {
+      await AdminService.updateStatus(id, status);
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status → $status')));
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status ပြောင်းမရပါ: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: const Text('Admin Orders'),
+      actions: [IconButton(icon: const Icon(Icons.logout), onPressed: () async { await AdminService.auth.signOut(); if (context.mounted) Navigator.pop(context); })],
+    ),
+    body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('orders').orderBy('createdAt', descending: true).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return Center(child: Padding(padding: const EdgeInsets.all(20), child: Text('Orders မဖတ်နိုင်ပါ:\n${snapshot.error}', textAlign: TextAlign.center)));
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) return const Center(child: Text('Order မရှိသေးပါ'));
+        return ListView.builder(
+          padding: const EdgeInsets.all(12), itemCount: docs.length,
+          itemBuilder: (context, i) {
+            final d = docs[i].data();
+            final status = (d['status'] ?? 'Pending').toString();
+            return Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${d['game'] ?? ''} • ${d['amount'] ?? ''}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 5),
+              Text('Order: ${d['orderId'] ?? docs[i].id}'),
+              Text('ID: ${d['playerId'] ?? ''}${(d['zoneId'] ?? '').toString().isNotEmpty ? ' / ${d['zoneId']}' : ''}'),
+              Text('${d['paymentMethod'] ?? ''} • ${d['price'] ?? ''}'),
+              Text('Transaction: ${d['transactionId'] ?? ''}'),
+              if ((d['note'] ?? '').toString().isNotEmpty) Text('Note: ${d['note']}'),
+              const SizedBox(height: 10),
+              Row(children: [const Text('Status: ', style: TextStyle(fontWeight: FontWeight.bold)), DropdownButton<String>(value: ['Pending','Confirmed','Completed','Cancelled'].contains(status) ? status : 'Pending', items: const ['Pending','Confirmed','Completed','Cancelled'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(), onChanged: (v) { if (v != null) changeStatus(context, docs[i].id, v); })]),
+            ])));
+          },
+        );
+      },
+    ),
+  );
 }
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
-  @override
-  State<HomePage> createState() => _HomePageState();
+  @override State<HomePage> createState() => _HomePageState();
 }
-
 class _HomePageState extends State<HomePage> {
-  int tab = 0;
-
+  int index = 0;
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      const StorePage(),
-      const OrdersPage(),
-      const AccountPage(),
-    ];
+    const pages = [StorePage(), OrdersPage(), AccountPage()];
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('NHA TopUp', style: TextStyle(fontWeight: FontWeight.bold)),
-        centerTitle: true,
-      ),
-      body: pages[tab],
+      appBar: AppBar(title: const Text('NHA TopUp'), centerTitle: true),
+      body: pages[index],
       bottomNavigationBar: NavigationBar(
-        selectedIndex: tab,
-        onDestinationSelected: (i) => setState(() => tab = i),
+        selectedIndex: index,
+        onDestinationSelected: (i) => setState(() => index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront), label: 'Store'),
-          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Orders'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Account'),
+          NavigationDestination(icon: Icon(Icons.storefront_outlined), label: 'Store'),
+          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), label: 'Orders'),
+          NavigationDestination(icon: Icon(Icons.person_outline), label: 'Account'),
         ],
       ),
     );
@@ -129,337 +220,118 @@ class _HomePageState extends State<HomePage> {
 
 class StorePage extends StatelessWidget {
   const StorePage({super.key});
-
   @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: const LinearGradient(colors: [Color(0xff3949ab), Color(0xff5c6bc0)]),
-          ),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('NHA TopUp', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
-              SizedBox(height: 6),
-              Text('Fast & easy game top-up', style: TextStyle(color: Colors.white70)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
-        const Text('Games', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        GameCard(
-          title: 'Mobile Legends',
-          subtitle: 'Diamond Top Up',
-          icon: Icons.diamond,
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductPage(game: 'MLBB', unit: 'Diamond'))),
-        ),
-        GameCard(
-          title: 'PUBG MOBILE',
-          subtitle: 'UC Top Up',
-          icon: Icons.sports_esports,
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductPage(game: 'PUBG', unit: 'UC'))),
-        ),
-      ],
-    );
-  }
-}
-
-class GameCard extends StatelessWidget {
-  final String title, subtitle;
-  final IconData icon;
-  final VoidCallback onTap;
-  const GameCard({super.key, required this.title, required this.subtitle, required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        child: ListTile(
-          contentPadding: const EdgeInsets.all(14),
-          leading: CircleAvatar(radius: 28, child: Icon(icon, size: 28)),
-          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text(subtitle),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: onTap,
-        ),
+  Widget build(BuildContext context) => ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(child: const Padding(padding: EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('NHA TopUp', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)), SizedBox(height: 6), Text('Fast & easy game top-up')] ))),
+          const SizedBox(height: 16),
+          const Text('Games', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          ListTile(cardColor: Theme.of(context).colorScheme.surfaceContainerHighest, leading: const Icon(Icons.diamond), title: const Text('Mobile Legends'), subtitle: const Text('Diamond Top Up'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductPage(game: 'MLBB', unit: 'Diamond')))),
+          const SizedBox(height: 8),
+          ListTile(cardColor: Theme.of(context).colorScheme.surfaceContainerHighest, leading: const Icon(Icons.sports_esports), title: const Text('PUBG MOBILE'), subtitle: const Text('UC Top Up'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductPage(game: 'PUBG', unit: 'UC')))),
+        ],
       );
 }
 
 class ProductPage extends StatefulWidget {
   final String game, unit;
   const ProductPage({super.key, required this.game, required this.unit});
-  @override
-  State<ProductPage> createState() => _ProductPageState();
+  @override State<ProductPage> createState() => _ProductPageState();
 }
-
 class _ProductPageState extends State<ProductPage> {
-  final idController = TextEditingController();
-  final zoneController = TextEditingController();
+  final id = TextEditingController();
+  final zone = TextEditingController();
   int selected = 0;
-
-  late final List<Map<String, String>> packages = widget.game == 'MLBB'
-      ? [
+  late final packages = widget.game == 'MLBB'
+      ? const [
           {'amount': '86 Diamond', 'price': '2,500 Ks'},
           {'amount': '172 Diamond', 'price': '4,800 Ks'},
           {'amount': '257 Diamond', 'price': '7,000 Ks'},
           {'amount': '344 Diamond', 'price': '9,200 Ks'},
         ]
-      : [
+      : const [
           {'amount': '60 UC', 'price': '3,000 Ks'},
           {'amount': '325 UC', 'price': '14,000 Ks'},
           {'amount': '660 UC', 'price': '27,000 Ks'},
           {'amount': '1800 UC', 'price': '70,000 Ks'},
         ];
-
-  @override
-  void dispose() {
-    idController.dispose();
-    zoneController.dispose();
-    super.dispose();
-  }
-
-  void order() {
-    if (idController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Game ID ထည့်ပါ')));
+  @override void dispose() { id.dispose(); zone.dispose(); super.dispose(); }
+  void next() {
+    if (id.text.trim().isEmpty || (widget.game == 'MLBB' && zone.text.trim().isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.game == 'MLBB' ? 'Game ID နဲ့ Zone ID ထည့်ပါ' : 'Game ID ထည့်ပါ')));
       return;
     }
-    Navigator.push(context, MaterialPageRoute(builder: (_) => OrderPage(
-          game: widget.game,
-          playerId: idController.text.trim(),
-          zoneId: zoneController.text.trim(),
-          amount: packages[selected]['amount']!,
-          price: packages[selected]['price']!,
-        )));
+    final p = packages[selected];
+    Navigator.push(context, MaterialPageRoute(builder: (_) => OrderPage(game: widget.game, playerId: id.text.trim(), zoneId: zone.text.trim(), amount: p['amount']!, price: p['price']!)));
   }
-
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('${widget.game} ${widget.unit}')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          TextField(controller: idController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Game ID / Player ID', border: OutlineInputBorder())),
-          if (widget.game == 'MLBB') ...[
-            const SizedBox(height: 12),
-            TextField(controller: zoneController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Zone ID', border: OutlineInputBorder())),
-          ],
-          const SizedBox(height: 18),
-          const Text('Package ရွေးပါ', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          ...List.generate(packages.length, (i) => Card(
-                child: RadioListTile<int>(
-                  value: i,
-                  groupValue: selected,
-                  onChanged: (v) => setState(() => selected = v!),
-                  title: Text(packages[i]['amount']!, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  secondary: Text(packages[i]['price']!),
-                ),
-              )),
-          const SizedBox(height: 12),
-          FilledButton.icon(onPressed: order, icon: const Icon(Icons.shopping_cart), label: const Padding(padding: EdgeInsets.all(12), child: Text('ဝယ်မည်'))),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Text('${widget.game} ${widget.unit}')),
+    body: ListView(padding: const EdgeInsets.all(16), children: [
+      TextField(controller: id, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Game ID / Player ID', border: OutlineInputBorder())),
+      if (widget.game == 'MLBB') ...[const SizedBox(height: 12), TextField(controller: zone, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Zone ID', border: OutlineInputBorder()))],
+      const SizedBox(height: 18), const Text('Package ရွေးပါ', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+      ...List.generate(packages.length, (i) => RadioListTile<int>(value: i, groupValue: selected, onChanged: (v) => setState(() => selected = v ?? 0), title: Text(packages[i]['amount']!, style: const TextStyle(fontWeight: FontWeight.bold)), secondary: Text(packages[i]['price']!))),
+      FilledButton(onPressed: next, child: const Padding(padding: EdgeInsets.all(12), child: Text('ဝယ်မည်'))),
+    ]),
+  );
 }
 
 class OrderPage extends StatelessWidget {
   final String game, playerId, zoneId, amount, price;
   const OrderPage({super.key, required this.game, required this.playerId, required this.zoneId, required this.amount, required this.price});
-
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Order Summary')),
-      body: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Game: $game'),
-            Text('ID: $playerId'),
-            if (zoneId.isNotEmpty) Text('Zone ID: $zoneId'),
-            const Divider(),
-            Text(amount, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            Text('Price: $price', style: const TextStyle(fontSize: 18)),
-          ]))),
-          const SizedBox(height: 14),
-          const Text('ငွေပေးချေမှုနည်းလမ်း', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          PaymentOption(title: 'KPay', subtitle: '09449269794', icon: Icons.account_balance_wallet, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentPage(game: game, playerId: playerId, zoneId: zoneId, amount: amount, price: price, method: 'KPay')))),
-          PaymentOption(title: 'WavePay', subtitle: '09449269794', icon: Icons.phone_android, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentPage(game: game, playerId: playerId, zoneId: zoneId, amount: amount, price: price, method: 'WavePay')))),
-          const Spacer(),
-          const Text('ငွေလွှဲပြီးပါက Screenshot တင်ပြီး အော်ဒါတင်နိုင်ပါတယ်။', textAlign: TextAlign.center),
-        ]),
-      ),
-    );
-  }
-}
-
-class PaymentOption extends StatelessWidget {
-  final String title, subtitle;
-  final IconData icon;
-  final VoidCallback onTap;
-  const PaymentOption({super.key, required this.title, required this.subtitle, required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => Card(
-        child: ListTile(
-          leading: CircleAvatar(child: Icon(icon)),
-          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text(subtitle),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: onTap,
-        ),
-      );
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Order Summary')),
+    body: ListView(padding: const EdgeInsets.all(16), children: [
+      Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Game: $game'), Text('ID: $playerId'), if (zoneId.isNotEmpty) Text('Zone ID: $zoneId'), const Divider(), Text(amount, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), Text('Price: $price', style: const TextStyle(fontSize: 18))]))),
+      const SizedBox(height: 12),
+      _pay(context, 'KPay', Icons.account_balance_wallet),
+      _pay(context, 'WavePay', Icons.phone_android),
+    ]),
+  );
+  Widget _pay(BuildContext context, String method, IconData icon) => Card(child: ListTile(leading: Icon(icon), title: Text(method), subtitle: const Text('ငွေလွှဲပြီး Order တင်မည်'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentPage(game: game, playerId: playerId, zoneId: zoneId, amount: amount, price: price, method: method)))));
 }
 
 class PaymentPage extends StatefulWidget {
   final String game, playerId, zoneId, amount, price, method;
   const PaymentPage({super.key, required this.game, required this.playerId, required this.zoneId, required this.amount, required this.price, required this.method});
-
-  @override
-  State<PaymentPage> createState() => _PaymentPageState();
+  @override State<PaymentPage> createState() => _PaymentPageState();
 }
-
 class _PaymentPageState extends State<PaymentPage> {
-  final noteController = TextEditingController();
-  XFile? screenshot;
-  bool submitting = false;
-
+  final tx = TextEditingController();
+  final note = TextEditingController();
+  static const receiver = '09449269794';
+  @override void dispose() { tx.dispose(); note.dispose(); super.dispose(); }
+  Future<void> submit() async {
+    if (tx.text.trim().isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Transaction ID / Reference ထည့်ပါ'))); return; }
+    try {
+      final orderId = await OrderService.create(game: widget.game, playerId: widget.playerId, zoneId: widget.zoneId, amount: widget.amount, price: widget.price, paymentMethod: widget.method, transactionId: tx.text.trim(), note: note.text.trim());
+      if (!mounted) return;
+      await showDialog(context: context, builder: (_) => AlertDialog(title: const Text('အော်ဒါတင်ပြီးပါပြီ'), content: Text('Order ID: $orderId\nStatus: Pending'), actions: [TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: const Text('OK'))]));
+    } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Order မတင်နိုင်ပါ: $e'))); }
+  }
   @override
-  void dispose() {
-    noteController.dispose();
-    super.dispose();
-  }
-
-  Future<void> pickScreenshot() async {
-    final image = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
-    if (image != null) setState(() => screenshot = image);
-  }
-
-  Future<void> submitOrder() async {
-    if (screenshot == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ငွေလွှဲ Screenshot တင်ပါ')));
-      return;
-    }
-    setState(() => submitting = true);
-    final order = OrderData(
-      id: 'NHA${DateTime.now().millisecondsSinceEpoch}',
-      game: widget.game,
-      playerId: widget.playerId,
-      zoneId: widget.zoneId,
-      amount: widget.amount,
-      price: widget.price,
-      method: widget.method,
-      status: 'Pending',
-      note: noteController.text.trim(),
-      screenshot: screenshot!.path,
-      createdAt: DateTime.now().toIso8601String(),
-    );
-    await OrderStore.add(order);
-    if (!mounted) return;
-    setState(() => submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Order ${order.id} တင်ပြီးပါပြီ')));
-    Navigator.popUntil(context, (route) => route.isFirst);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('${widget.method} Payment')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(widget.method, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            const Text('ငွေလက်ခံမည့်နံပါတ်'),
-            const SizedBox(height: 6),
-            const Text('09449269794', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            Text('Amount: ${widget.amount}'),
-            Text('Total: ${widget.price}'),
-          ]))),
-          const SizedBox(height: 14),
-          FilledButton.icon(onPressed: pickScreenshot, icon: const Icon(Icons.photo_library), label: Text(screenshot == null ? 'ငွေလွှဲ Screenshot ရွေးမည်' : 'Screenshot ရွေးပြီးပြီ ✓')),
-          if (screenshot != null) ...[
-            const SizedBox(height: 10),
-            ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(File(screenshot!.path), height: 220, fit: BoxFit.cover)),
-          ],
-          const SizedBox(height: 14),
-          const Text('မှတ်ချက် (မဖြစ်မနေမဟုတ်ပါ)'),
-          const SizedBox(height: 8),
-          TextField(controller: noteController, maxLines: 3, decoration: const InputDecoration(hintText: 'ဥပမာ - ငွေလွှဲပြီးပါပြီ', border: OutlineInputBorder())),
-          const SizedBox(height: 14),
-          FilledButton.icon(onPressed: submitting ? null : submitOrder, icon: const Icon(Icons.receipt_long), label: Padding(padding: const EdgeInsets.all(12), child: Text(submitting ? 'တင်နေသည်...' : 'အော်ဒါတင်မည်'))),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: Text('${widget.method} Payment')), body: ListView(padding: const EdgeInsets.all(16), children: [
+    Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(widget.method, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)), const SizedBox(height: 10), const Text('ငွေလက်ခံမည့်နံပါတ်'), SelectableText(receiver, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)), const Divider(), Text('Amount: ${widget.amount}'), Text('Total: ${widget.price}')]))),
+    const SizedBox(height: 14), TextField(controller: tx, decoration: const InputDecoration(labelText: 'Transaction ID / Reference', border: OutlineInputBorder())),
+    const SizedBox(height: 12), TextField(controller: note, maxLines: 3, decoration: const InputDecoration(labelText: 'မှတ်ချက် (ရွေးချယ်နိုင်)', border: OutlineInputBorder())),
+    const SizedBox(height: 18), FilledButton.icon(onPressed: submit, icon: const Icon(Icons.cloud_upload), label: const Padding(padding: EdgeInsets.all(12), child: Text('အော်ဒါတင်မည်'))),
+  ]));
 }
 
-class OrdersPage extends StatefulWidget {
+class OrdersPage extends StatelessWidget {
   const OrdersPage({super.key});
+  String label(String s) => {'Pending':'စစ်ဆေးနေဆဲ','Confirmed':'အတည်ပြုပြီး','Completed':'TopUp ပြီး','Cancelled':'ပယ်ဖျက်ပြီး'}[s] ?? s;
   @override
-  State<OrdersPage> createState() => _OrdersPageState();
+  Widget build(BuildContext context) => StreamBuilder<QuerySnapshot<Map<String,dynamic>>>(stream: OrderService.myOrders(), builder: (context, snap) {
+    if (snap.hasError) return Center(child: Padding(padding: const EdgeInsets.all(20), child: Text('Firestore မဖတ်နိုင်ပါ:\n${snap.error}', textAlign: TextAlign.center)));
+    if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+    final docs = [...snap.data!.docs]..sort((a,b) { final at=a.data()['createdAt']; final bt=b.data()['createdAt']; if (at is Timestamp && bt is Timestamp) return bt.compareTo(at); return 0; });
+    if (docs.isEmpty) return const Center(child: Text('Order မရှိသေးပါ'));
+    return ListView.builder(padding: const EdgeInsets.all(12), itemCount: docs.length, itemBuilder: (_, i) { final d=docs[i].data(); final s=(d['status']??'Pending').toString(); return Card(child: ListTile(leading: CircleAvatar(child: Icon(s=='Completed'?Icons.check:Icons.receipt_long)), title: Text('${d['game']} • ${d['amount']}'), subtitle: Text('ID: ${d['playerId']}\n${d['paymentMethod']} • ${d['price']}\n${label(s)}')); }); });
+  });
 }
-
-class _OrdersPageState extends State<OrdersPage> {
-  List<OrderData> orders = [];
-
-  @override
-  void initState() {
-    super.initState();
-    load();
-  }
-
-  Future<void> load() async {
-    final data = await OrderStore.load();
-    if (mounted) setState(() => orders = data);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: load,
-      child: orders.isEmpty
-          ? ListView(children: const [SizedBox(height: 180), Center(child: Icon(Icons.receipt_long, size: 64)), SizedBox(height: 10), Center(child: Text('Order History')), SizedBox(height: 5), Center(child: Text('အော်ဒါမရှိသေးပါ။'))])
-          : ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: orders.length,
-              itemBuilder: (_, i) {
-                final o = orders[i];
-                return Card(
-                  child: ListTile(
-                    leading: CircleAvatar(child: Icon(o.game == 'MLBB' ? Icons.diamond : Icons.sports_esports)),
-                    title: Text('${o.game} • ${o.amount}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('Order: ${o.id}\n${o.method} • ${o.price}\nID: ${o.playerId}${o.zoneId.isNotEmpty ? ' / ${o.zoneId}' : ''}'),
-                    isThreeLine: true,
-                    trailing: Chip(label: Text(o.status)),
-                  ),
-                );
-              },
-            ),
-    );
-  }
-}
-
-class AccountPage extends StatelessWidget {
-  const AccountPage({super.key});
-  @override
-  Widget build(BuildContext context) => const Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          CircleAvatar(radius: 34, child: Icon(Icons.person, size: 38)),
-          SizedBox(height: 12),
-          Text('NHA TopUp Account', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
-          SizedBox(height: 6),
-          Text('Admin / Login system ကို နောက်အဆင့်မှာ ထည့်နိုင်ပါတယ်။'),
-        ]),
-      );
-}
+class AccountPage extends StatelessWidget { const AccountPage({super.key}); @override Widget build(BuildContext context) => const Center(child: Text('NHA TopUp Account')); }

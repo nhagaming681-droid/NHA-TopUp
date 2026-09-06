@@ -1,20 +1,18 @@
-# NHA TopUp
+# NHA TopUp — Firestore v1
 
-NHA TopUp is a starter Flutter project for a game top-up store UI.
+Orders are written to Cloud Firestore instead of only local storage.
 
-Included:
-- Home/store screen
-- MLBB Diamond packages
-- PUBG MOBILE UC packages
-- Game ID / Zone ID fields
-- Order summary
-- Orders and Account placeholder screens
+GitHub Actions requires the `GOOGLE_SERVICES_JSON` Actions secret.
 
-Important:
-This is a UI/demo starter. It does NOT generate or deliver Diamonds/UC.
-Before selling real in-game currency, connect a legitimate/authorized top-up provider/API and implement secure payment processing and server-side order verification.
+Next planned step: Firebase Storage for payment screenshots + Firebase Authentication + Admin Panel + secure Firestore rules.
 
-To run:
-1. Install Flutter SDK.
-2. In this project folder run `flutter pub get`
-3. Run `flutter run`
+Real game-currency delivery still requires an authorized supplier/API.
+
+
+## Admin setup
+1. Enable Firebase Authentication > Email/Password.
+2. Create an admin user in Authentication.
+3. In Firestore create `admins/{UID}` for that user's UID, with `enabled: true`.
+4. Deploy/use `firestore.rules` before production.
+
+The app's Account tab now has Admin Login. Admin can view orders and change status.

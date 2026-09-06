@@ -3,21 +3,18 @@ name: Build NHA TopUp APK
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-
       - name: Create Android project
         run: flutter create --platforms=android --org com.nha --project-name topup .
       - name: Configure Firebase Android plugin
@@ -27,14 +24,11 @@ jobs:
       - name: Add Firebase config
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
-
+        run: printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
       - name: Get packages
         run: flutter pub get
-
       - name: Build release APK
         run: flutter build apk --release
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
