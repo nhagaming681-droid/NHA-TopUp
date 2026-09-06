@@ -217,10 +217,110 @@ class OrderPage extends StatelessWidget {
             Text('Price: $price', style: const TextStyle(fontSize: 18)),
           ]))),
           const SizedBox(height: 14),
-          const Text('Payment System ကို နောက်အဆင့်မှာ KPay / WavePay စသည်ဖြင့် ချိတ်နိုင်အောင် ထည့်မယ်။', textAlign: TextAlign.center),
+          const Text('ငွေပေးချေမှုနည်းလမ်း', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          PaymentOption(
+            title: 'KPay',
+            subtitle: 'KPay နံပါတ်ကို နောက်မှထည့်နိုင်သည်',
+            icon: Icons.account_balance_wallet,
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentPage(
+              game: game, playerId: playerId, zoneId: zoneId, amount: amount, price: price, method: 'KPay',
+            ))),
+          ),
+          PaymentOption(
+            title: 'WavePay',
+            subtitle: 'WavePay နံပါတ်ကို နောက်မှထည့်နိုင်သည်',
+            icon: Icons.phone_android,
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentPage(
+              game: game, playerId: playerId, zoneId: zoneId, amount: amount, price: price, method: 'WavePay',
+            ))),
+          ),
           const Spacer(),
-          FilledButton(onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Demo order created — payment/API မချိတ်ရသေးပါ'))), child: const Text('Order တင်မည်')),
+          const Text('⚠️ Demo: Payment account နံပါတ်နှင့် top-up API မချိတ်ရသေးပါ။', textAlign: TextAlign.center),
         ]),
+      ),
+    );
+  }
+}
+
+
+class PaymentOption extends StatelessWidget {
+  final String title, subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+  const PaymentOption({super.key, required this.title, required this.subtitle, required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: ListTile(
+      leading: CircleAvatar(child: Icon(icon)),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: onTap,
+    ),
+  );
+}
+
+class PaymentPage extends StatefulWidget {
+  final String game, playerId, zoneId, amount, price, method;
+  const PaymentPage({super.key, required this.game, required this.playerId, required this.zoneId, required this.amount, required this.price, required this.method});
+
+  @override
+  State<PaymentPage> createState() => _PaymentPageState();
+}
+
+class _PaymentPageState extends State<PaymentPage> {
+  final noteController = TextEditingController();
+
+  @override
+  void dispose() {
+    noteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('${widget.method} Payment')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(widget.method, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                const Text('ငွေလက်ခံမည့်နံပါတ်'),
+                const SizedBox(height: 6),
+                const Text('နောက်မှ ထည့်မည်', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                Text('Amount: ${widget.amount}'),
+                Text('Total: ${widget.price}'),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text('Payment ပြီးပါက မှတ်ချက်ထည့်နိုင်သည်'),
+          const SizedBox(height: 8),
+          TextField(
+            controller: noteController,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              hintText: 'ဥပမာ - ငွေလွှဲပြီးပါပြီ',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Demo order — Payment verification/API မချိတ်ရသေးပါ')),
+            ),
+            icon: const Icon(Icons.receipt_long),
+            label: const Padding(padding: EdgeInsets.all(12), child: Text('အော်ဒါတင်မည်')),
+          ),
+        ],
       ),
     );
   }
