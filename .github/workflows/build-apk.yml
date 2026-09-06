@@ -19,9 +19,7 @@ jobs:
           cache: true
 
       - name: Create Android project
-        run: flutter create --platforms=android .
-      - name: Set Firebase package name
-        run: sed -i 's/applicationId = "com.example.nha_top_up"/applicationId = "com.nha.topup"/' android/app/build.gradle.kts
+        run: flutter create --platforms=android --org com.nha --project-name topup .
       - name: Configure Firebase Android plugin
         run: |
           sed -i '/plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
