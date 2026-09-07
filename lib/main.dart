@@ -272,5 +272,111 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
 class AdminPanelPage extends StatelessWidget {
   const AdminPanelPage({super.key});
   Future<void> changeStatus(BuildContext context,String id,String status)async{try{await AdminService.updateStatus(id,status);if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Status → $status')));}catch(e){if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Status ပြောင်းမရပါ: $e')));}}
-  @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('Admin Orders'),actions:[IconButton(icon:const Icon(Icons.logout),onPressed:()async{await AdminService.auth.signOut();if(context.mounted)Navigator.pop(context);})]),body:StreamBuilder<QuerySnapshot<Map<String,dynamic>>>(stream:FirebaseFirestore.instance.collection('orders').orderBy('createdAt',descending:true).snapshots(),builder:(context,snap){if(snap.hasError)return Center(child:Padding(padding:const EdgeInsets.all(20),child:Text('Orders မဖတ်နိုင်ပါ:\n${snap.error}',textAlign:TextAlign.center)));if(snap.connectionState==ConnectionState.waiting)return const Center(child:CircularProgressIndicator());final docs=snap.data?.docs??[];if(docs.isEmpty)return const Center(child:Text('Order မရှိသေးပါ'));return ListView.builder(padding:const EdgeInsets.all(12),itemCount:docs.length,itemBuilder:(context,i){final d=docs[i].data();final status=(d['status']??'Pending').toString();return Card(child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('${d['game']??''} • ${d['amount']??''}',style:const TextStyle(fontSize:18,fontWeight:FontWeight.bold)),Text('Order: ${d['orderId']??docs[i].id}'),Text('ID: ${d['playerId']??''}${(d['zoneId']??'').toString().isNotEmpty?' / ${d['zoneId']}':''}'),Text('${d['paymentMethod']??''} • ${d['price']??''}'),Text('Transaction: ${d['transactionId']??''}'),if((d['note']??'').toString().isNotEmpty)Text('Note: ${d['note']}'),const SizedBox(height:8),Row(children:[const Text('Status: ',style:TextStyle(fontWeight:FontWeight.bold)),DropdownButton<String>(value:['Pending','Confirmed','Completed','Cancelled'].contains(status)?status:'Pending',items:const ['Pending','Confirmed','Completed','Cancelled'].map((s)=>DropdownMenuItem(value:s,child:Text(s))).toList(),onChanged:(v){if(v!=null)changeStatus(context,docs[i].id,v);})])])));});}}));
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Admin Orders'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await AdminService.auth.signOut();
+              if (context.mounted) Navigator.pop(context);
+            },
+          ),
+        ],
+      ),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('orders')
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        builder: (context, snap) {
+          if (snap.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  'Orders မဖတ်နိုင်ပါ:\n${snap.error}',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final docs = snap.data?.docs ?? [];
+          if (docs.isEmpty) {
+            return const Center(child: Text('Order မရှိသေးပါ'));
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: docs.length,
+            itemBuilder: (context, i) {
+              final d = docs[i].data();
+              final status = (d['status'] ?? 'Pending').toString();
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${d['game'] ?? ''} • ${d['amount'] ?? ''}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text('Order: ${d['orderId'] ?? docs[i].id}'),
+                      Text(
+                        'ID: ${d['playerId'] ?? ''}${(d['zoneId'] ?? '').toString().isNotEmpty ? ' / ${d['zoneId']}' : ''}',
+                      ),
+                      Text('${d['paymentMethod'] ?? ''} • ${d['price'] ?? ''}'),
+                      Text('Transaction: ${d['transactionId'] ?? ''}'),
+                      if ((d['note'] ?? '').toString().isNotEmpty)
+                        Text('Note: ${d['note']}'),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Text(
+                            'Status: ',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          DropdownButton<String>(
+                            value: ['Pending', 'Confirmed', 'Completed', 'Cancelled']
+                                    .contains(status)
+                                ? status
+                                : 'Pending',
+                            items: const [
+                              'Pending',
+                              'Confirmed',
+                              'Completed',
+                              'Cancelled',
+                            ]
+                                .map((s) => DropdownMenuItem(
+                                      value: s,
+                                      child: Text(s),
+                                    ))
+                                .toList(),
+                            onChanged: (v) {
+                              if (v != null) {
+                                changeStatus(context, docs[i].id, v);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
 }
