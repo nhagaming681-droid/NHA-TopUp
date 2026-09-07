@@ -142,16 +142,36 @@ class _ProductPageState extends State<ProductPage> {
   int selected = 0;
   late final packages = widget.game == 'MLBB'
       ? const [
-          {'amount': '86 Diamond', 'price': '2,500 Ks'},
-          {'amount': '172 Diamond', 'price': '4,800 Ks'},
-          {'amount': '257 Diamond', 'price': '7,000 Ks'},
-          {'amount': '344 Diamond', 'price': '9,200 Ks'},
+          {'amount': '50 Diamond', 'price': '3,400 Ks'},
+          {'amount': '86 Diamond', 'price': '5,300 Ks'},
+          {'amount': '150 Diamond', 'price': '10,200 Ks'},
+          {'amount': '172 Diamond', 'price': '10,600 Ks'},
+          {'amount': '250 Diamond', 'price': '16,300 Ks'},
+          {'amount': '258 Diamond', 'price': '15,900 Ks'},
+          {'amount': '344 Diamond', 'price': '21,200 Ks'},
+          {'amount': '430 Diamond', 'price': '26,500 Ks'},
+          {'amount': '500 Diamond', 'price': '33,400 Ks'},
+          {'amount': '516 Diamond', 'price': '31,800 Ks'},
+          {'amount': '706 Diamond', 'price': '41,500 Ks'},
+          {'amount': '792 Diamond', 'price': '46,800 Ks'},
+          {'amount': '878 Diamond', 'price': '52,100 Ks'},
+          {'amount': '964 Diamond', 'price': '57,400 Ks'},
+          {'amount': '1050 Diamond', 'price': '62,700 Ks'},
+          {'amount': '1412 Diamond', 'price': '83,000 Ks'},
+          {'amount': '2195 Diamond', 'price': '129,000 Ks'},
+          {'amount': '3688 Diamond', 'price': '220,000 Ks'},
         ]
       : const [
-          {'amount': '60 UC', 'price': '3,000 Ks'},
-          {'amount': '325 UC', 'price': '14,000 Ks'},
-          {'amount': '660 UC', 'price': '27,000 Ks'},
-          {'amount': '1800 UC', 'price': '70,000 Ks'},
+          {'amount': '60 UC', 'price': '4,200 Ks'},
+          {'amount': '180 UC', 'price': '12,500 Ks'},
+          {'amount': '325 UC', 'price': '21,500 Ks'},
+          {'amount': '385 UC', 'price': '25,700 Ks'},
+          {'amount': '660 UC', 'price': '42,000 Ks'},
+          {'amount': '720 UC', 'price': '46,000 Ks'},
+          {'amount': '985 UC', 'price': '63,000 Ks'},
+          {'amount': '1320 UC', 'price': '83,300 Ks'},
+          {'amount': '1800 UC', 'price': '105,000 Ks'},
+          {'amount': '3850 UC', 'price': '206,500 Ks'},
         ];
   @override void dispose() { id.dispose(); zone.dispose(); super.dispose(); }
   void next() {
