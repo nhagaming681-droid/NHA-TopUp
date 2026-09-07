@@ -1,15 +1,39 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /orders/{orderId} {
-      allow create: if request.resource.data.customerId is string;
-      allow read: if request.auth != null || (resource.data.customerId is string);
-      allow update: if request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
-      allow delete: if request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    function signedIn() {
+      return request.auth != null;
     }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
+    }
+
     match /admins/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if false;
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update, delete: if false;
+    }
+
+    match /orders/{orderId} {
+      allow create: if signedIn()
+        && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.status == 'Pending'
+        && request.resource.data.orderId == orderId
+        && request.resource.data.game is string
+        && request.resource.data.playerId is string
+        && request.resource.data.amount is string
+        && request.resource.data.price is string
+        && request.resource.data.paymentMethod is string
+        && request.resource.data.transactionId is string
+        && request.resource.data.note is string;
+
+      allow read: if signedIn()
+        && (resource.data.customerId == request.auth.uid || isAdmin());
+
+      allow update, delete: if isAdmin();
     }
   }
 }
